@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GMSR Calculation Agent</title>
+<style>
+  :root {
+    --ibm-blue:#0043ce; --ibm-blue-hover:#0035a6; --ibm-blue-light:#edf4ff;
+    --ibm-dark:#161616; --ibm-gray:#f4f4f4; --ibm-gray-mid:#e0e0e0;
+    --ibm-gray-text:#6f6f6f; --ibm-green:#24a148; --ibm-red:#da1e28;
+    --ibm-yellow:#f1c21b; --white:#ffffff; --border:#e0e0e0;
+    --shadow:0 2px 8px rgba(0,0,0,.08); --radius:4px;
+    --font:-apple-system,"IBM Plex Sans","Segoe UI",system-ui,sans-serif;
+  }
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:var(--font);font-size:14px;line-height:1.6;
+    color:var(--ibm-dark);background:#f4f4f4;min-height:100vh}
+
+  /* Header */
+  .header{background:var(--ibm-dark);color:#fff;padding:0 1.5rem;height:48px;
+    display:flex;align-items:center;justify-content:space-between;
+    position:sticky;top:0;z-index:100;box-shadow:0 1px 6px rgba(0,0,0,.3)}
+  .header-brand{display:flex;align-items:center;gap:.6rem;
+    font-weight:600;font-size:15px}
+  .btn-reset-top{background:transparent;color:#a8b2c3;border:1px solid #393939;
+    padding:.3rem .85rem;border-radius:var(--radius);cursor:pointer;
+    font-size:13px;font-family:var(--font);transition:all .15s;
+    display:flex;align-items:center;gap:.4rem}
+  .btn-reset-top:hover{background:#393939;color:#fff;border-color:#525252}
+
+  /* Main */
+  .main{max-width:820px;margin:0 auto;padding:2rem 1.5rem 4rem}
+  .page-title{text-align:center;margin-bottom:1.75rem}
+  .page-title h1{font-size:1.6rem;font-weight:700;color:var(--ibm-dark);margin-bottom:.35rem}
+  .page-title p{color:var(--ibm-gray-text);font-size:13px;max-width:520px;margin:0 auto}
+
+  /* Cards */
+  .card{background:var(--white);border:1px solid var(--border);border-radius:var(--radius);
+    padding:1.25rem;margin-bottom:1rem;box-shadow:var(--shadow)}
+  .card-title{font-size:14px;font-weight:600;color:var(--ibm-dark);margin-bottom:.9rem;
+    display:flex;align-items:center;gap:.5rem}
+  .step-badge{background:var(--ibm-blue);color:#fff;width:20px;height:20px;
+    border-radius:50%;display:inline-flex;align-items:center;justify-content:center;
+    font-size:10px;font-weight:700;flex-shrink:0}
+
+  /* Upload zones */
+  .upload-zone{border:2px dashed var(--ibm-gray-mid);border-radius:var(--radius);
+    padding:1.25rem;text-align:center;cursor:pointer;transition:all .2s;
+    position:relative;background:#fafafa}
+  .upload-zone:hover,.upload-zone.drag-over{border-color:var(--ibm-blue);background:var(--ibm-blue-light)}
+  .upload-zone.has-file{border-color:var(--ibm-green);background:#defbe6;border-style:solid}
+  .upload-zone input[type="file"]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+  .upload-icon{font-size:1.75rem;margin-bottom:.4rem;display:block}
+  .upload-label{font-weight:600;font-size:13px;color:var(--ibm-blue);display:block;margin-bottom:.2rem}
+  .upload-hint{font-size:11px;color:var(--ibm-gray-text)}
+  .upload-file-name{margin-top:.4rem;font-size:12px;color:var(--ibm-green);font-weight:600;
+    word-break:break-all;display:none}
+  .upload-zone.has-file .upload-file-name{display:block}
+  .upload-zone.has-file .upload-default{display:none}
+
+  .important-note{margin-top:.65rem;background:#fff8e1;border-left:3px solid var(--ibm-yellow);
+    padding:.45rem .7rem;font-size:12px;color:#5c4400;border-radius:0 var(--radius) var(--radius) 0}
+
+  /* Reference file note */
+  .ref-note{margin-bottom:1rem;background:var(--ibm-blue-light);border-left:3px solid var(--ibm-blue);
+    padding:.5rem .8rem;font-size:12px;color:#00327a;border-radius:0 var(--radius) var(--radius) 0}
+
+  /* Process button */
+  .btn-process{width:100%;background:var(--ibm-blue);color:#fff;border:none;
+    padding:.8rem 1.5rem;font-size:14px;font-weight:600;font-family:var(--font);
+    border-radius:var(--radius);cursor:pointer;transition:background .15s;
+    display:flex;align-items:center;justify-content:center;gap:.55rem;margin-top:1rem}
+  .btn-process:hover:not(:disabled){background:var(--ibm-blue-hover)}
+  .btn-process:disabled{opacity:.45;cursor:not-allowed}
+
+  /* Status */
+  .status-bar{display:none;margin-top:.85rem;padding:.7rem .9rem;border-radius:var(--radius);
+    font-size:13px;align-items:center;gap:.55rem}
+  .status-bar.processing{display:flex;background:var(--ibm-blue-light);
+    color:var(--ibm-blue);border:1px solid #c0d8ff}
+  .status-bar.error{display:flex;background:#fff1f1;color:var(--ibm-red);
+    border:1px solid #ffc0c0;flex-direction:column;align-items:flex-start}
+  .spinner{width:16px;height:16px;border:2px solid #c0d8ff;border-top-color:var(--ibm-blue);
+    border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* Results */
+  #results-section{display:none}
+  #results-section.visible{display:block}
+  .divider{height:1px;background:var(--border);margin:1.25rem 0}
+  .results-header{display:flex;align-items:center;gap:.65rem;margin-bottom:1rem}
+  .results-header h2{font-size:1.1rem;font-weight:700}
+  .success-badge{background:var(--ibm-green);color:#fff;font-size:11px;font-weight:700;
+    padding:.15rem .55rem;border-radius:2rem;letter-spacing:.05em;text-transform:uppercase}
+
+  /* Summary table */
+  .summary-table{width:100%;border-collapse:collapse;font-size:13px}
+  .summary-table thead tr{background:var(--ibm-blue);color:#fff}
+  .summary-table thead th{padding:.55rem .85rem;text-align:left;font-weight:600;font-size:12px}
+  .summary-table tbody tr:nth-child(even){background:#f7f8fa}
+  .summary-table tbody tr:hover{background:var(--ibm-blue-light)}
+  .summary-table td{padding:.5rem .85rem;border-bottom:1px solid var(--border)}
+  .summary-table td:first-child{color:var(--ibm-gray-text)}
+  .summary-table td.value{font-weight:600;color:var(--ibm-dark)}
+  .highlight-row td{background:#defbe6!important}
+  .highlight-row td.value{color:var(--ibm-green)}
+
+  /* Write log */
+  .write-log{font-size:12px;line-height:1.8}
+  .write-log .section-label{font-weight:700;color:var(--ibm-blue);
+    border-bottom:1px solid var(--border);padding-bottom:.25rem;margin-bottom:.35rem;margin-top:.5rem}
+  .write-log table{width:100%;border-collapse:collapse}
+  .write-log table td{padding:.3rem .6rem;border-bottom:1px solid #f0f0f0}
+  .write-log table td:first-child{color:var(--ibm-gray-text);width:35%}
+  .write-log table td.cell-ref{font-family:monospace;font-weight:700;
+    color:var(--ibm-blue);background:var(--ibm-blue-light);
+    border-radius:3px;padding:.15rem .4rem;font-size:11px}
+  .write-log table td.written-val{font-weight:600}
+
+  /* HW table */
+  .hw-table{width:100%;border-collapse:collapse;font-size:12px;margin-top:.4rem}
+  .hw-table thead tr{background:#393939;color:#fff}
+  .hw-table thead th{padding:.4rem .7rem;text-align:left;font-weight:600}
+  .hw-table tbody tr:nth-child(even){background:#f7f8fa}
+  .hw-table td{padding:.35rem .7rem;border-bottom:1px solid #e8e8e8}
+  .hw-table .top-item{font-weight:700;color:var(--ibm-blue)}
+  .hw-table tfoot tr{background:#e0e0e0}
+  .hw-table tfoot td{padding:.4rem .7rem;font-weight:700;font-size:12px}
+
+  /* Downloads */
+  .download-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));
+    gap:.85rem;margin-top:.4rem}
+  .download-card{border:1px solid var(--border);border-radius:var(--radius);
+    padding:.9rem;background:#fafafa;transition:box-shadow .15s}
+  .download-card:hover{box-shadow:0 4px 12px rgba(0,0,0,.1)}
+  .dl-icon{font-size:1.75rem;margin-bottom:.35rem}
+  .dl-label{font-size:11px;color:var(--ibm-gray-text);margin-bottom:.2rem}
+  .dl-name{font-size:11px;font-weight:600;color:var(--ibm-dark);word-break:break-all;
+    margin-bottom:.6rem;min-height:2.4em}
+  .btn-dl{width:100%;background:var(--ibm-blue);color:#fff;border:none;
+    padding:.45rem .7rem;font-size:12px;font-weight:600;font-family:var(--font);
+    border-radius:var(--radius);cursor:pointer;transition:background .15s;
+    display:flex;align-items:center;justify-content:center;gap:.35rem}
+  .btn-dl:hover{background:var(--ibm-blue-hover)}
+
+  /* Reset bottom */
+  .reset-section{text-align:center;margin-top:1.75rem;padding-top:1.25rem;border-top:1px solid var(--border)}
+  .btn-reset-bottom{background:transparent;color:var(--ibm-red);border:1px solid var(--ibm-red);
+    padding:.5rem 1.25rem;border-radius:var(--radius);cursor:pointer;font-size:13px;
+    font-family:var(--font);font-weight:600;transition:all .15s;
+    display:inline-flex;align-items:center;gap:.45rem}
+  .btn-reset-bottom:hover{background:var(--ibm-red);color:#fff}
+
+  /* Connection banner */
+  .conn-banner{display:none;background:#fff3cd;border:1px solid #ffc107;color:#856404;
+    padding:.7rem .9rem;border-radius:var(--radius);font-size:12px;
+    margin-bottom:.9rem;align-items:flex-start;gap:.5rem}
+  .conn-banner.visible{display:flex}
+
+  /* EUP manual override panel */
+  .eup-override{display:none;margin-top:.75rem;padding:.9rem 1rem;
+    background:#fff8e1;border:1px solid #f1c21b;border-radius:var(--radius)}
+  .eup-override.visible{display:block}
+  .eup-override-title{font-weight:700;font-size:13px;color:#5c4400;margin-bottom:.5rem;
+    display:flex;align-items:center;gap:.45rem}
+  .eup-override-hint{font-size:12px;color:#6f6f6f;margin-bottom:.7rem}
+  .eup-override-row{display:flex;align-items:center;gap:.6rem;flex-wrap:wrap}
+  .eup-override-prefix{font-size:13px;font-weight:600;color:#5c4400}
+  .eup-override input[type="number"]{flex:1;min-width:160px;max-width:260px;
+    border:1px solid #f1c21b;border-radius:var(--radius);padding:.45rem .65rem;
+    font-size:13px;font-family:var(--font);background:#fff;color:var(--ibm-dark)}
+  .eup-override input[type="number"]:focus{outline:2px solid var(--ibm-blue);border-color:var(--ibm-blue)}
+  .btn-retry{background:#0043ce;color:#fff;border:none;padding:.45rem 1rem;
+    border-radius:var(--radius);font-size:13px;font-weight:600;font-family:var(--font);
+    cursor:pointer;transition:background .15s;white-space:nowrap}
+  .btn-retry:hover{background:#0035a6}
+  .btn-retry:disabled{opacity:.45;cursor:not-allowed}
+
+  @media(max-width:580px){.main{padding:.9rem}.download-grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header class="header">
+  <div class="header-brand">
+    <svg width="20" height="20" viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="3" fill="#0043CE"/>
+      <text x="4" y="21" fill="white" font-family="Arial" font-weight="700" font-size="13">IBM</text></svg>
+    GMSR Calculation Agent
+  </div>
+  <button class="btn-reset-top" onclick="resetAll()">
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+      <polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4"/>
+    </svg>Reset
+  </button>
+</header>
+
+<!-- MAIN -->
+<main class="main">
+
+  <div class="page-title">
+    <h1>GMSR Calculation Agent</h1>
+    <p>Automatically extracts EUP HW Price and HW List Price from ePricer, then fills the Discount Tool and Countries Margin Grid.</p>
+  </div>
+
+  <!-- Backend connection warning -->
+  <div class="conn-banner" id="conn-banner">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:1px">
+      <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+    </svg>
+    <div><strong>Python backend not detected.</strong> Start it first:
+      <code style="background:#fff8dc;padding:1px 5px;border-radius:2px">python3 gmsr_agent.py</code>
+      then refresh.
+    </div>
+  </div>
+
+  <!-- Upload section -->
+  <div id="upload-section">
+
+    <!-- Reference file note -->
+    <div class="ref-note">
+      📁 <strong>Built-in reference file:</strong> GMSR discount tool june 2018 sts.xls — must be in the same folder as gmsr_agent.py
+    </div>
+
+    <!-- Step 1 -->
+    <div class="card">
+      <div class="card-title"><span class="step-badge">1</span> Upload ePricer Standard Report</div>
+      <div class="upload-zone" id="zone-epricer"
+           ondragover="dragOver(event,'zone-epricer')" ondragleave="dragLeave(event,'zone-epricer')"
+           ondrop="drop(event,'zone-epricer','input-epricer','fname-epricer')">
+        <input type="file" id="input-epricer" accept=".html,.htm"
+               onchange="fileSelected('input-epricer','zone-epricer','fname-epricer')">
+        <div class="upload-default">
+          <span class="upload-icon">📄</span>
+          <span class="upload-label">Upload ePricer Standard Report</span>
+          <span class="upload-hint">Drag &amp; drop or click · .html / .htm</span>
+        </div>
+        <div class="upload-file-name" id="fname-epricer"></div>
+      </div>
+    </div>
+
+    <!-- Country selector -->
+    <div class="card">
+      <div class="card-title"><span class="step-badge">2</span> Select Country</div>
+      <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap">
+        <label style="font-size:13px;font-weight:600;color:#161616;white-space:nowrap">Country / Region</label>
+        <select id="sel-country" style="flex:1;min-width:220px;max-width:340px;border:1px solid #e0e0e0;
+          border-radius:4px;padding:.45rem .65rem;font-size:13px;font-family:inherit;
+          background:#fff;color:#161616;cursor:pointer" onchange="onCountryChange()">
+          <option value="">— Select country —</option>
+          <option value="Saudi Arabia">Saudi Arabia (SBM sheet)</option>
+          <option value="other">Other MEA country (GBM sheet)</option>
+        </select>
+        <span id="sheet-badge" style="display:none;font-size:11px;font-weight:700;padding:.2rem .55rem;
+          border-radius:2rem;letter-spacing:.04em"></span>
+      </div>
+      <div id="country-note" style="display:none;margin-top:.6rem;font-size:12px;
+        padding:.4rem .7rem;border-radius:4px"></div>
+    </div>
+
+    <!-- Step 3 -->
+    <div class="card">
+      <div class="card-title"><span class="step-badge">3</span> Upload GMSR Countries Base Channel Margin Grid</div>
+      <div class="upload-zone" id="zone-grid"
+           ondragover="dragOver(event,'zone-grid')" ondragleave="dragLeave(event,'zone-grid')"
+           ondrop="drop(event,'zone-grid','input-grid','fname-grid')">
+        <input type="file" id="input-grid" accept=".xls,.xlsx"
+               onchange="fileSelected('input-grid','zone-grid','fname-grid')">
+        <div class="upload-default">
+          <span class="upload-icon">📊</span>
+          <span class="upload-label">Upload GMSR Countries Base Channel Margin Grid</span>
+          <span class="upload-hint">Drag &amp; drop or click · .xls / .xlsx</span>
+        </div>
+        <div class="upload-file-name" id="fname-grid"></div>
+      </div>
+      <div class="important-note">⚠️ <strong>Important:</strong> Always upload the latest version of the GMSR Countries Base Channel Margin Grid.</div>
+    </div>
+
+    <!-- Process -->
+    <button class="btn-process" id="btn-process" disabled onclick="run(undefined)">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <polygon points="5 3 19 12 5 21 5 3"/>
+      </svg>
+      Process Files
+    </button>
+
+    <div class="status-bar" id="status-bar">
+      <div class="spinner"></div>
+      <span id="status-msg">Processing…</span>
+    </div>
+
+    <!-- EUP HW PRICE manual override (shown only when auto-extraction fails) -->
+    <div class="eup-override" id="eup-override">
+      <div class="eup-override-title">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#b45309" stroke-width="2.5">
+          <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+        </svg>
+        EUP HW PRICE not found — enter it manually
+      </div>
+      <p class="eup-override-hint">The ePricer HTML does not contain a recognisable EUP HW PRICE. Enter the value below (USD) and click <strong>Retry</strong> to continue processing.</p>
+      <div class="eup-override-row">
+        <span class="eup-override-prefix">USD</span>
+        <input type="number" id="eup-override-input" min="1" step="0.01"
+               placeholder="e.g. 875000"
+               oninput="document.getElementById('btn-retry').disabled=!this.value||+this.value<=0">
+        <button class="btn-retry" id="btn-retry" disabled onclick="retryWithOverride()">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align:middle">
+            <polygon points="5 3 19 12 5 21 5 3"/>
+          </svg>
+          Retry
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Results section -->
+  <div id="results-section">
+    <div class="divider"></div>
+    <div class="results-header">
+      <h2>Results</h2>
+      <span class="success-badge">✓ Done</span>
+    </div>
+
+    <!-- Calculation summary -->
+    <div class="card">
+      <div class="card-title">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0043ce" stroke-width="2.5">
+          <rect x="3" y="3" width="18" height="18" rx="2"/>
+          <line x1="9" y1="9" x2="15" y2="9"/><line x1="9" y1="13" x2="15" y2="13"/>
+        </svg>
+        Extracted &amp; Calculated Values
+      </div>
+      <table class="summary-table">
+        <thead><tr><th>Field</th><th>Value</th></tr></thead>
+        <tbody id="summary-body"></tbody>
+      </table>
+    </div>
+
+    <!-- What was written -->
+    <div class="card">
+      <div class="card-title">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0043ce" stroke-width="2.5">
+          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+        </svg>
+        What Was Written to the Files
+      </div>
+      <div class="write-log" id="write-log"></div>
+    </div>
+
+    <!-- HW items -->
+    <div class="card">
+      <div class="card-title">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0043ce" stroke-width="2.5">
+          <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/>
+          <line x1="8" y1="18" x2="21" y2="18"/>
+          <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/>
+          <line x1="3" y1="18" x2="3.01" y2="18"/>
+        </svg>
+        Hardware Line Items (from ePricer)
+      </div>
+      <table class="hw-table">
+        <thead><tr><th>Product</th><th>List Price (USD)</th><th>Note</th></tr></thead>
+        <tbody id="hw-body"></tbody>
+        <tfoot><tr><td>Total HW List Price</td><td id="hw-total"></td><td></td></tr></tfoot>
+      </table>
+    </div>
+
+    <!-- Downloads -->
+    <div class="card">
+      <div class="card-title">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#0043ce" stroke-width="2.5">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+        Download Updated Files
+      </div>
+      <div class="download-grid" id="dl-grid"></div>
+    </div>
+
+    <!-- Reset bottom -->
+    <div class="reset-section">
+      <button class="btn-reset-bottom" onclick="resetAll()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-4"/>
+        </svg>
+        Reset &amp; Start Over
+      </button>
+    </div>
+  </div>
+
+</main>
+
+<script>
+const API = 'http://localhost:5050';
+let _data = null;
+
+/* ── upload helpers ── */
+function fileSelected(inputId, zoneId, fnameId) {
+  const f = document.getElementById(inputId).files[0];
+  const z = document.getElementById(zoneId);
+  const n = document.getElementById(fnameId);
+  if (f) { z.classList.add('has-file'); n.textContent = '✓ ' + f.name; }
+  else   { z.classList.remove('has-file'); n.textContent = ''; }
+  checkReady();
+}
+function dragOver(e, id) { e.preventDefault(); document.getElementById(id).classList.add('drag-over'); }
+function dragLeave(e, id) { document.getElementById(id).classList.remove('drag-over'); }
+function drop(e, zoneId, inputId, fnameId) {
+  e.preventDefault();
+  document.getElementById(zoneId).classList.remove('drag-over');
+  const f = e.dataTransfer.files[0];
+  if (!f) return;
+  const dt = new DataTransfer(); dt.items.add(f);
+  document.getElementById(inputId).files = dt.files;
+  fileSelected(inputId, zoneId, fnameId);
+}
+function onCountryChange() {
+  const val   = document.getElementById('sel-country').value;
+  const badge = document.getElementById('sheet-badge');
+  const note  = document.getElementById('country-note');
+  if (val === 'Saudi Arabia') {
+    badge.textContent = 'SBM'; badge.style.cssText += ';background:#0043ce;color:#fff;display:inline-block';
+    note.style.cssText = 'display:block;background:#edf4ff;color:#00327a;border-left:3px solid #0043ce;padding:.4rem .7rem;border-radius:0 4px 4px 0';
+    note.textContent = 'Saudi Arabia selected — values will be written to the SBM sheet using the SBM channel factor (0.8937).';
+  } else if (val === 'other') {
+    badge.textContent = 'GBM'; badge.style.cssText += ';background:#24a148;color:#fff;display:inline-block';
+    note.style.cssText = 'display:block;background:#defbe6;color:#044317;border-left:3px solid #24a148;padding:.4rem .7rem;border-radius:0 4px 4px 0';
+    note.textContent = 'Other MEA country selected — values will be written to the GBM sheet using the GBM channel factor (0.8807).';
+  } else {
+    badge.style.display = 'none'; note.style.display = 'none';
+  }
+  checkReady();
+}
+
+function checkReady() {
+  const ok = document.getElementById('input-epricer').files.length > 0
+          && document.getElementById('input-grid').files.length > 0
+          && document.getElementById('sel-country').value !== '';
+  document.getElementById('btn-process').disabled = !ok;
+}
+
+/* ── processing ── */
+async function run(eupOverride) {
+  const epricer = document.getElementById('input-epricer').files[0];
+  const grid    = document.getElementById('input-grid').files[0];
+  if (!epricer || !grid) return;
+
+  hideResults();
+  hideOverride();
+  setStatus('processing', eupOverride
+    ? 'Retrying with manual EUP HW PRICE…'
+    : 'Extracting data from ePricer HTML…');
+  document.getElementById('btn-process').disabled = true;
+
+  const country = document.getElementById('sel-country').value;
+
+  const fd = new FormData();
+  fd.append('epricer_html', epricer);
+  fd.append('grid_file', grid);
+  fd.append('country', country === 'other' ? '' : country);
+  if (eupOverride) fd.append('eup_hw_override', eupOverride);
+
+  try {
+    const res  = await fetch(`${API}/process`, { method:'POST', body:fd });
+    const data = await res.json();
+
+    // Special case: EUP HW PRICE not found → show manual entry panel
+    if (res.status === 422 && data.eup_not_found) {
+      setStatus('error',
+        'EUP HW PRICE could not be extracted automatically from the ePricer HTML.\n' +
+        'Please enter it manually below.');
+      showOverride();
+      document.getElementById('btn-process').disabled = false;
+      return;
+    }
+
+    if (!res.ok || data.error) {
+      let msg = data.error || `Server error ${res.status}`;
+      if (data.missing_files) msg += '\n\nMissing:\n• ' + data.missing_files.join('\n• ');
+      throw new Error(msg);
+    }
+    _data = data;
+    hideStatus();
+    render(data);
+    document.getElementById('conn-banner').classList.remove('visible');
+  } catch(err) {
+    const netErr = err.message && (err.message.includes('fetch') || err.message.includes('Failed') || err.message.includes('NetworkError'));
+    if (netErr) {
+      setStatus('error', 'Cannot connect to the Python backend.\nRun:  python3 gmsr_agent.py  — then refresh and try again.');
+      document.getElementById('conn-banner').classList.add('visible');
+    } else {
+      setStatus('error', err.message);
+    }
+    document.getElementById('btn-process').disabled = false;
+  }
+}
+
+function retryWithOverride() {
+  const val = document.getElementById('eup-override-input').value.trim();
+  if (!val || +val <= 0) return;
+  document.getElementById('btn-retry').disabled = true;
+  run(val);
+}
+
+function showOverride() {
+  document.getElementById('eup-override').classList.add('visible');
+  document.getElementById('eup-override-input').value = '';
+  document.getElementById('btn-retry').disabled = true;
+  document.getElementById('eup-override-input').focus();
+}
+function hideOverride() {
+  document.getElementById('eup-override').classList.remove('visible');
+}
+
+/* ── render results ── */
+function fmtN(v, dec=2) { return Number(v).toLocaleString('en-US',{minimumFractionDigits:dec,maximumFractionDigits:dec}); }
+function fmtP(v)        { return (Number(v)*100).toFixed(2)+'%'; }
+
+function render(d) {
+  /* Summary table */
+  const sb = document.getElementById('summary-body');
+  sb.innerHTML = '';
+  const sheetLabel = d.disc_sheet === 'SBM'
+    ? 'SBM (Saudi Arabia)'
+    : 'GBM (Other MEA)';
+  const rows = [
+    ['Quote ID',                              d.quote_id||'N/A',         false],
+    ['Country / Sheet',                       sheetLabel,                false],
+    ['EUP HW Price → written to C4',          'USD '+fmtN(d.eup_hw),     false],
+    ['HW List/Ref Price → written to E4',     'USD '+fmtN(d.hw_list),    false],
+    ['Discount (F4 = 1 − D4/E4)',             fmtP(d.f4_discount),       true ],
+    ['Machine Type → written to C7',          d.machine_concat||'N/A',   false],
+    ['Discount entered at E10',               fmtP(d.f4_discount),       true ],
+  ];
+  rows.forEach(([label, val, green]) => {
+    const tr = document.createElement('tr');
+    if (green) tr.classList.add('highlight-row');
+    tr.innerHTML = `<td>${esc(label)}</td><td class="value">${esc(val)}</td>`;
+    sb.appendChild(tr);
+  });
+
+  /* Write log */
+  const wl  = document.getElementById('write-log');
+  const w   = d.writes || {};
+  const dt  = w.discount_tool || {};
+  const gr  = w.grid || {};
+  wl.innerHTML = `
+    <div class="section-label">GMSR discount tool june 2018 sts.xls — Sheet: ${esc(dt.sheet||'GBM')}</div>
+    <table>
+      <tr><td>Cell</td><td>Label</td><td>Value Written / Result</td></tr>
+      <tr><td><span class="cell-ref">C4</span></td><td>EU Requested (EUP HW Price) — <em>user input</em></td><td class="written-val">USD ${fmtN(dt.C4)}</td></tr>
+      <tr><td><span class="cell-ref">D4</span></td><td>EU Deducted = C4 × GBM factor — <em>formula cache</em></td><td class="written-val">USD ${fmtN(dt.D4)}</td></tr>
+      <tr><td><span class="cell-ref">E4</span></td><td>List / Reference Price — <em>user input</em></td><td class="written-val">USD ${fmtN(dt.E4)}</td></tr>
+      <tr><td><span class="cell-ref">F4</span></td><td>Discount = 1 − D4/E4 — <em>formula cache</em></td><td class="written-val">${fmtP(dt.F4)}</td></tr>
+      <tr><td><span class="cell-ref">H4</span></td><td>Release margin reference — <em>unchanged (fixed)</em></td><td style="color:#6f6f6f;font-size:11px">not modified</td></tr>
+    </table>
+    <div class="section-label" style="margin-top:.9rem">GMSR Countries Base Channel Margin Grid — Sheet: ${esc(gr.sheet||'Base Margin Entry Sheet')}</div>
+    <table>
+      <tr><td>Cell</td><td>Label</td><td>Value Written</td></tr>
+      <tr><td><span class="cell-ref">C7</span></td><td>Machine Type (dropdown)</td><td class="written-val">${esc(gr.C7||'N/A')}</td></tr>
+      <tr><td><span class="cell-ref">E10</span></td><td>End User Discount Requested</td><td class="written-val">${fmtP(gr.E10)}</td></tr>
+    </table>`;
+
+  /* HW items */
+  const hb = document.getElementById('hw-body');
+  hb.innerHTML = '';
+  let tot = 0;
+  const items = d.hw_items || {};
+  Object.entries(items).sort((a,b)=>b[1]-a[1]).forEach(([prod, lp]) => {
+    tot += lp;
+    const isTop = prod === d.top_product;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="${isTop?'top-item':''}">${esc(prod)}${isTop?' ★':''}</td>
+      <td>${fmtN(lp)}</td>
+      <td style="font-size:11px;color:#6f6f6f">${isTop?'Highest list price → used for C7':''}</td>`;
+    hb.appendChild(tr);
+  });
+  document.getElementById('hw-total').textContent = fmtN(tot);
+
+  /* Downloads — 2 files only, original names */
+  const dlg = document.getElementById('dl-grid');
+  dlg.innerHTML = '';
+  const files = d.files || {};
+  [
+    { key:'discount_tool', icon:'📋', label:'GMSR Discount Tool' },
+    { key:'grid',          icon:'📊', label:'Countries Margin Grid' },
+  ].forEach(({key, icon, label}) => {
+    const f = files[key]; if (!f) return;
+    const c = document.createElement('div');
+    c.className = 'download-card';
+    c.innerHTML = `
+      <div class="dl-icon">${icon}</div>
+      <div class="dl-label">${esc(label)}</div>
+      <div class="dl-name">${esc(f.name)}</div>
+      <button class="btn-dl" onclick="dlFile('${key}')">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+        Download
+      </button>`;
+    dlg.appendChild(c);
+  });
+
+  document.getElementById('results-section').classList.add('visible');
+  document.getElementById('results-section').scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+function dlFile(key) {
+  if (!_data?.files?.[key]) return;
+  const f = _data.files[key];
+  const bytes = atob(f.data);
+  const arr = new Uint8Array(bytes.length);
+  for (let i=0;i<bytes.length;i++) arr[i]=bytes.charCodeAt(i);
+  const url = URL.createObjectURL(new Blob([arr],{type:f.mime}));
+  const a = Object.assign(document.createElement('a'),{href:url,download:f.name});
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+/* ── status / helpers ── */
+function setStatus(type, msg) {
+  const bar = document.getElementById('status-bar');
+  bar.className = 'status-bar ' + type;
+  if (type === 'error') {
+    bar.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:1px"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg><span style="white-space:pre-line">${esc(msg)}</span>`;
+  } else {
+    bar.innerHTML = `<div class="spinner"></div><span>${esc(msg)}</span>`;
+  }
+}
+function hideStatus() {
+  const bar = document.getElementById('status-bar');
+  bar.className = 'status-bar';
+  bar.innerHTML = '<div class="spinner"></div><span id="status-msg">Processing…</span>';
+}
+function hideResults() { document.getElementById('results-section').classList.remove('visible'); }
+function esc(s) {
+  return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+/* ── reset ── */
+function resetAll() {
+  ['input-epricer','input-grid'].forEach(id => { document.getElementById(id).value=''; });
+  ['zone-epricer','zone-grid'].forEach(id => { document.getElementById(id).classList.remove('has-file','drag-over'); });
+  ['fname-epricer','fname-grid'].forEach(id => { document.getElementById(id).textContent=''; });
+  document.getElementById('sel-country').value = '';
+  document.getElementById('sheet-badge').style.display = 'none';
+  document.getElementById('country-note').style.display = 'none';
+  document.getElementById('btn-process').disabled = true;
+  hideStatus(); hideResults(); hideOverride(); _data = null;
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+/* ── init ── */
+document.addEventListener('DOMContentLoaded', () => {
+  fetch(`${API}/`, {method:'HEAD'})
+    .then(r => { if (!r.ok) throw 0; })
+    .catch(() => document.getElementById('conn-banner').classList.add('visible'));
+});
+</script>
+</body>
+</html>
